@@ -48,6 +48,7 @@
                 <TextBlock Text="{Binding Path=Year}"></TextBlock>
                 <TextBlock Text="{Binding Path=Director}"></TextBlock>
                 <TextBlock Text="{Binding Path=Runtime}"></TextBlock>
+                <TextBlock Text="{Binding Path=Runtime}"></TextBlock>
                 <TextBlock Text="{Binding Path=NumberOfCopies}"></TextBlock>
             </StackPanel>
         </DataTemplate>

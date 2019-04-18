@@ -36,8 +36,12 @@ namespace VideoKlub
 
         private void UserSearch(string searchQuery)
         {
-            string query = "SELECT * from Customers  WHERE LastName LIKE @userSearchQuery + '%'";
-
+            //Search users by string
+            string query = "SELECT " +
+                "CustomerID, FirstName, LastName, StreetAddress, City, PostalCode, Movie1, Movie2, Movie3, mov1.Title as Title1, mov2.Title as Title2, mov3.Title as Title3 " +
+                "from Customers cust LEFT JOIN movies mov1 on cust.Movie1 = mov1.movieId LEFT JOIN movies mov2 on cust.Movie2 = mov2.movieId LEFT JOIN movies mov3 on cust.Movie3 = mov3.movieId " +
+                "WHERE LastName LIKE @userSearchQuery + '%'";
+            
             using (connection = new SqlConnection(connectionString))
             using (SqlCommand command = new SqlCommand(query, connection))
             using (SqlDataAdapter adapter = new SqlDataAdapter(command))
@@ -45,14 +49,17 @@ namespace VideoKlub
                 command.Parameters.AddWithValue("@userSearchQuery", searchQuery);
                 userSearchResultsTable = new DataTable();
                 adapter.Fill(userSearchResultsTable);
-
                 resultsListboxUsers.DataContext = userSearchResultsTable;
             }
         }
 
         private void UserSearch(int userID)
         {
-            string query = "SELECT * from Customers  WHERE CustomerID=@userSearchQuery";
+            //Search users by userID
+            string query = "SELECT " +
+                "CustomerID, FirstName, LastName, StreetAddress, City, PostalCode, Movie1, Movie2, Movie3, mov1.Title as Title1, mov2.Title as Title2, mov3.Title as Title3 " +
+                "from Customers cust LEFT JOIN movies mov1 on cust.Movie1 = mov1.movieId LEFT JOIN movies mov2 on cust.Movie2 = mov2.movieId LEFT JOIN movies mov3 on cust.Movie3 = mov3.movieId " +
+                "WHERE CustomerID=@userSearchQuery";
 
             using (connection = new SqlConnection(connectionString))
             using (SqlCommand command = new SqlCommand(query, connection))
@@ -85,28 +92,22 @@ namespace VideoKlub
 
                 //Show rented movies
                 rentedMoviesList = new DataTable();
-                int? userMovie1 = userSearchResultsTable.Rows[selectionIndex].Field<int?>(6);
-                int? userMovie2 = userSearchResultsTable.Rows[selectionIndex].Field<int?>(7);
-                int? userMovie3 = userSearchResultsTable.Rows[selectionIndex].Field<int?>(8);
-
-                using (SqlConnection connection = new SqlConnection(connectionString))
-                using (SqlCommand command = connection.CreateCommand())
-                using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+                rentedMoviesList.Columns.Add("Title");
+                rentedMoviesList.Columns.Add("MovieId");
+                   
+                if (userSearchResultsTable.Rows[selectionIndex]["Title1"]!=DBNull.Value)
                 {
-                    connection.Open();
-                    command.CommandText = "SELECT * FROM Movies WHERE (MovieId IS NOT NULL) AND (MovieId=@movie1 OR MovieId=@movie2 OR MovieId=@movie3)";
-                    command.Parameters.AddWithValue("@movie1", userMovie1);
-                    command.Parameters.AddWithValue("@movie2", userMovie2);
-                    command.Parameters.AddWithValue("@movie3", userMovie3);
-
-                    //Query parameters @movie1-3 can't be null.
-                    foreach (SqlParameter parameter in command.Parameters)
-                        if (parameter.Value == null)
-                            parameter.Value = DBNull.Value;
-
-                    adapter.Fill(rentedMoviesList);
+                    rentedMoviesList.Rows.Add(new object[] { userSearchResultsTable.Rows[selectionIndex]["Title1"], userSearchResultsTable.Rows[selectionIndex]["Movie1"] });
                 }
-
+                if (userSearchResultsTable.Rows[selectionIndex]["Title2"]!= DBNull.Value)
+                {
+                    rentedMoviesList.Rows.Add(new object[] { userSearchResultsTable.Rows[selectionIndex]["Title2"], userSearchResultsTable.Rows[selectionIndex]["Movie2"] });
+                }
+                if (userSearchResultsTable.Rows[selectionIndex]["Title3"]!= DBNull.Value)
+                {
+                    rentedMoviesList.Rows.Add(new object[] { userSearchResultsTable.Rows[selectionIndex]["Title3"], userSearchResultsTable.Rows[selectionIndex]["Movie3"] });
+                }
+                
                 rentedMoviesListbox.DataContext = rentedMoviesList;
                 rentedMoviesListbox.Items.Refresh();
             }
@@ -114,9 +115,9 @@ namespace VideoKlub
 
         private void ShowSelectedMovieDetails(object sender, SelectionChangedEventArgs e)
         {
+            //Display director, runtime and number of copies
             if (resultsListboxMovies.SelectedIndex >= 0)
             {
-                int selectedMovieID = movieSearchResultsTable.Rows[resultsListboxMovies.SelectedIndex].Field<int>(0);
                 DataTable tempDatatable = movieSearchResultsTable.Clone();
                 tempDatatable.ImportRow(movieSearchResultsTable.Rows[resultsListboxMovies.SelectedIndex]);
                 movieDetailsListbox.DataContext = tempDatatable;
@@ -126,7 +127,7 @@ namespace VideoKlub
 
         private void RentMovie(int userID, int movieID)
         {
-            //do the renting
+            //do the renting - update the database
             using (SqlConnection connection = new SqlConnection(connectionString))
             using (SqlCommand command = connection.CreateCommand())
             {
@@ -146,6 +147,7 @@ namespace VideoKlub
 
         private bool CheckSelectionValidity(int userSelectionIndex, int movieSelectionIndex)
         {
+            //Check if both user and movie have been selected
             if (userSelectionIndex < 0)
             {
                 MessageBox.Show("No user selected!");
@@ -161,13 +163,18 @@ namespace VideoKlub
 
         private bool CheckCanRent(DataTable userTable, DataTable movieTable, int userSelectionIndex)
         {
-            string userFirstName = userSearchResultsTable.Rows[userSelectionIndex].Field<string>(1);
-            string userLastName = userSearchResultsTable.Rows[userSelectionIndex].Field<string>(2);
-            string movieName = movieSearchResultsTable.Rows[resultsListboxMovies.SelectedIndex].Field<string>(1);
-            int numberOfCopies = movieSearchResultsTable.Rows[resultsListboxMovies.SelectedIndex].Field<int>(3);
-            int? userMovie1 = userSearchResultsTable.Rows[userSelectionIndex].Field<int?>(6);
-            int? userMovie2 = userSearchResultsTable.Rows[userSelectionIndex].Field<int?>(7);
-            int? userMovie3 = userSearchResultsTable.Rows[userSelectionIndex].Field<int?>(8);
+            //Get data for Messagebox and checking if there is >0 copies of movie available for rent
+            string userFirstName = (string)userSearchResultsTable.Rows[userSelectionIndex]["FirstName"];
+            string userLastName = (string)userSearchResultsTable.Rows[userSelectionIndex]["LastName"];
+            string movieName = (string)movieSearchResultsTable.Rows[resultsListboxMovies.SelectedIndex]["Title"];
+            int numberOfCopies = (int)movieSearchResultsTable.Rows[resultsListboxMovies.SelectedIndex]["NumberOfCopies"];
+            int movieId = (int)movieSearchResultsTable.Rows[resultsListboxMovies.SelectedIndex]["MovieId"];
+
+            //Check how many movies user currently has rented
+            //Field method used due to issues with casting DBNull into nullable type
+            int? userMovie1 = (int?)userSearchResultsTable.Rows[userSelectionIndex].Field<int?>("Movie1");
+            int? userMovie2 = (int?)userSearchResultsTable.Rows[userSelectionIndex].Field<int?>("Movie2");
+            int? userMovie3 = (int?)userSearchResultsTable.Rows[userSelectionIndex].Field<int?>("Movie3");
 
             if (MessageBox.Show(String.Format("Are you sure {0} {1} wants to rent {2}?", userFirstName, userLastName, movieName), "Rent movie?", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
             {
@@ -183,6 +190,11 @@ namespace VideoKlub
                     MessageBox.Show("The customer has rented the maximum amount of movies (3)");
                     return false;
                 }
+                else if (userMovie1==movieId || userMovie2==movieId || userMovie3==movieId)
+                {
+                    MessageBox.Show("The customer has already rented a copy of that movie!");
+                    return false;
+                }
                 else
                     return true;
             }
@@ -192,32 +204,28 @@ namespace VideoKlub
 
         private void RentMovieButton_Click(object sender, RoutedEventArgs e)
         {
-            //Check if everything is selected
-
+            //Check if both user and movie have been selected
             int userSelectionIndex = resultsListboxUsers.SelectedIndex;
             int movieSelectionIndex = resultsListboxMovies.SelectedIndex;
-
             if (!CheckSelectionValidity(userSelectionIndex, movieSelectionIndex))
                 return;
 
             //Get info on current selection for easier readability
-            int selectedUserID = userSearchResultsTable.Rows[userSelectionIndex].Field<int>(0);
-            int selectedMovieID = movieSearchResultsTable.Rows[movieSelectionIndex].Field<int>(0);
-            string userLastName = userSearchResultsTable.Rows[userSelectionIndex].Field<string>(2);
-            int numberOfCopies = movieSearchResultsTable.Rows[resultsListboxMovies.SelectedIndex].Field<int>(3);
-            //Get info on currently rented movies to check if the user has rented the maximum limit
+            int selectedUserID = (int)userSearchResultsTable.Rows[userSelectionIndex]["CustomerID"];
+            int selectedMovieID = (int)movieSearchResultsTable.Rows[movieSelectionIndex]["MovieId"];
+            int numberOfCopies = (int)movieSearchResultsTable.Rows[resultsListboxMovies.SelectedIndex]["NumberOfCopies"];
             
+            //Get info on currently rented movies to check if the user has rented the maximum limit
             if (CheckCanRent(userSearchResultsTable, movieSearchResultsTable, userSelectionIndex))
             {
                 //Update database, show that the number of available copies is reduced by one (just manually change query results instead of making another query)
                 RentMovie(selectedUserID, selectedMovieID);
-                movieSearchResultsTable.Rows[resultsListboxMovies.SelectedIndex].SetField(3, numberOfCopies - 1);
+                movieSearchResultsTable.Rows[resultsListboxMovies.SelectedIndex].SetField("NumberOfCopies", numberOfCopies - 1);
                 ShowSelectedMovieDetails(null, null);
 
                 //Do a user query to pull the data on rented movies
                 UserSearch(selectedUserID);
                 resultsListboxUsers.SelectedIndex=0;
-
                 ShowSelectedMovieDetails(null, null);
                 ShowSelectedUserDetails(null, null);
             }
@@ -246,11 +254,11 @@ namespace VideoKlub
             int movieSelectionIndex = rentedMoviesListbox.SelectedIndex;
             if (CheckSelectionValidity(userSelectionIndex, movieSelectionIndex))
             {
-                string userFirstName = userSearchResultsTable.Rows[userSelectionIndex].Field<string>(1);
-                string userLastName = userSearchResultsTable.Rows[userSelectionIndex].Field<string>(2);
-                string movieName = rentedMoviesList.Rows[movieSelectionIndex].Field<string>(1);
-                int returnMovieID = rentedMoviesList.Rows[movieSelectionIndex].Field<int>(0);
-                int returnUserID = userSearchResultsTable.Rows[userSelectionIndex].Field<int>(0);
+                string userFirstName = (string)userSearchResultsTable.Rows[userSelectionIndex]["FirstName"];
+                string userLastName = (string)userSearchResultsTable.Rows[userSelectionIndex]["LastName"];
+                string movieName = (string)rentedMoviesList.Rows[movieSelectionIndex]["Title"];
+                int returnMovieID = int.Parse(rentedMoviesList.Rows[movieSelectionIndex]["MovieId"].ToString());
+                int returnUserID = (int)userSearchResultsTable.Rows[userSelectionIndex]["CustomerID"];
                 if (MessageBox.Show(String.Format("{0} {1} wants to return the movie {2}. Proceed?", userFirstName, userLastName, movieName), "Rent movie?", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
                     ReturnMovie(returnUserID, returnMovieID);
             }

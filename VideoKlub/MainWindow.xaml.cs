@@ -1,18 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 using System.Configuration;
 using System.Data;
 
@@ -23,11 +13,13 @@ namespace VideoKlub
     /// </summary>
     public partial class MainWindow : Window
     {
-        string connectionString = ConfigurationManager.ConnectionStrings["VideoKlub.Properties.Settings.VideoKlubMarkoConnectionString"].ConnectionString;
+        readonly string connectionString = ConfigurationManager.ConnectionStrings["VideoKlub.Properties.Settings.VideoKlubMarkoConnectionString"].ConnectionString;
         SqlConnection connection;
         DataTable userSearchResultsTable = new DataTable();
         DataTable movieSearchResultsTable = new DataTable();
         DataTable rentedMoviesList = new DataTable();
+
+        const int MAX_MOVIES_RENTED = 3;
 
         public MainWindow()
         {
@@ -38,11 +30,11 @@ namespace VideoKlub
         {
             //Search users by string
             string query = "SELECT " +
-                "CustomerID, FirstName, LastName, StreetAddress, City, PostalCode, Movie1, Movie2, Movie3, mov1.Title as Title1, mov2.Title as Title2, mov3.Title as Title3 " +
-                "from Customers cust LEFT JOIN movies mov1 on cust.Movie1 = mov1.movieId LEFT JOIN movies mov2 on cust.Movie2 = mov2.movieId LEFT JOIN movies mov3 on cust.Movie3 = mov3.movieId " +
+                "CustomerID, FirstName, LastName, StreetAddress, City, PostalCode " +
+                "from Customers cust " +
                 "WHERE LastName LIKE @userSearchQuery + '%'";
             
-            using (connection = new SqlConnection(connectionString))
+            using (SqlConnection connection = new SqlConnection(connectionString))
             using (SqlCommand command = new SqlCommand(query, connection))
             using (SqlDataAdapter adapter = new SqlDataAdapter(command))
             {
@@ -57,13 +49,14 @@ namespace VideoKlub
         {
             //Search users by userID
             string query = "SELECT " +
-                "CustomerID, FirstName, LastName, StreetAddress, City, PostalCode, Movie1, Movie2, Movie3, mov1.Title as Title1, mov2.Title as Title2, mov3.Title as Title3 " +
-                "from Customers cust LEFT JOIN movies mov1 on cust.Movie1 = mov1.movieId LEFT JOIN movies mov2 on cust.Movie2 = mov2.movieId LEFT JOIN movies mov3 on cust.Movie3 = mov3.movieId " +
+                "CustomerID, FirstName, LastName, StreetAddress, City, PostalCode " +
+                "from Customers cust " +
                 "WHERE CustomerID=@userSearchQuery";
 
             using (connection = new SqlConnection(connectionString))
             using (SqlCommand command = new SqlCommand(query, connection))
             using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+
             {
                 command.Parameters.AddWithValue("@userSearchQuery", userID);
                 userSearchResultsTable = new DataTable();
@@ -83,31 +76,26 @@ namespace VideoKlub
         {
             if (resultsListboxUsers.SelectedIndex >= 0)
             {
-                int selectionIndex = resultsListboxUsers.SelectedIndex;
-                //int selectedUserID = userSearchResultsTable.Rows[resultsListboxUsers.SelectedIndex].Field<int>(0);
+                int selectedUserID = userSearchResultsTable.Rows[resultsListboxUsers.SelectedIndex].Field<int>(0);
                 DataTable tempDatatable = userSearchResultsTable.Clone();
                 tempDatatable.ImportRow(userSearchResultsTable.Rows[resultsListboxUsers.SelectedIndex]);
                 userDetailsListbox.DataContext = tempDatatable;
                 userDetailsListbox.Items.Refresh();
 
                 //Show rented movies
-                rentedMoviesList = new DataTable();
-                rentedMoviesList.Columns.Add("Title");
-                rentedMoviesList.Columns.Add("MovieId");
-                   
-                if (userSearchResultsTable.Rows[selectionIndex]["Title1"]!=DBNull.Value)
+                string query = "SELECT "+
+                                "Title, MovieId " +
+                                "FROM Customers cust LEFT JOIN CustomerMovies ctom on cust.CustomerID = ctom.Customer LEFT JOIN Movies on ctom.Movie = Movies.MovieId " +
+                                "WHERE cust.CustomerID=@selectedUserID";
+                using (SqlConnection connection = new SqlConnection(connectionString))
+                using (SqlCommand command = new SqlCommand(query, connection))
+                using (SqlDataAdapter adapter = new SqlDataAdapter(command))
                 {
-                    rentedMoviesList.Rows.Add(new object[] { userSearchResultsTable.Rows[selectionIndex]["Title1"], userSearchResultsTable.Rows[selectionIndex]["Movie1"] });
+                    rentedMoviesList = new DataTable();
+                    command.Parameters.AddWithValue("@selectedUserID", selectedUserID);
+                    adapter.Fill(rentedMoviesList);
                 }
-                if (userSearchResultsTable.Rows[selectionIndex]["Title2"]!= DBNull.Value)
-                {
-                    rentedMoviesList.Rows.Add(new object[] { userSearchResultsTable.Rows[selectionIndex]["Title2"], userSearchResultsTable.Rows[selectionIndex]["Movie2"] });
-                }
-                if (userSearchResultsTable.Rows[selectionIndex]["Title3"]!= DBNull.Value)
-                {
-                    rentedMoviesList.Rows.Add(new object[] { userSearchResultsTable.Rows[selectionIndex]["Title3"], userSearchResultsTable.Rows[selectionIndex]["Movie3"] });
-                }
-                
+
                 rentedMoviesListbox.DataContext = rentedMoviesList;
                 rentedMoviesListbox.Items.Refresh();
             }
@@ -115,12 +103,12 @@ namespace VideoKlub
 
         private void ShowSelectedMovieDetails(object sender, SelectionChangedEventArgs e)
         {
-            //Display director, runtime and number of copies
+            //Display director, runtime and number of copies by creating a new table and binding it to movieDetailsListbox
             if (resultsListboxMovies.SelectedIndex >= 0)
             {
-                DataTable tempDatatable = movieSearchResultsTable.Clone();
-                tempDatatable.ImportRow(movieSearchResultsTable.Rows[resultsListboxMovies.SelectedIndex]);
-                movieDetailsListbox.DataContext = tempDatatable;
+                DataTable singleMovieData = movieSearchResultsTable.Clone();
+                singleMovieData.ImportRow(movieSearchResultsTable.Rows[resultsListboxMovies.SelectedIndex]);
+                movieDetailsListbox.DataContext = singleMovieData;
                 movieDetailsListbox.Items.Refresh();
             }
         }
@@ -132,15 +120,13 @@ namespace VideoKlub
             using (SqlCommand command = connection.CreateCommand())
             {
                 connection.Open();
-                command.CommandText = "UPDATE Customers " +
-                    "SET Movie1 = CASE WHEN (Movie1 is NULL) THEN @rentedMovie ELSE Movie1 END, " +
-                    "Movie2 = CASE WHEN ((Movie1 IS NOT NULL) AND (Movie2 IS NULL)) THEN @rentedMovie ELSE Movie2 END, " +
-                    "Movie3 = CASE WHEN ((Movie1 IS NOT NULL) AND (Movie2 IS NOT NULL) AND (Movie3 IS NULL)) THEN @rentedMovie ELSE Movie3 END " +
-                    "WHERE CustomerID=@currentUser";
+                command.CommandText = "INSERT INTO CustomerMovies (Customer, Movie, DateRented) " +
+                    "VALUES (@customerID, @movieID, @DateRented)";
 
-                command.CommandText += " UPDATE Movies " + "SET NumberOfCopies-=1 WHERE MovieID=@rentedMovie";
-                command.Parameters.AddWithValue("@rentedMovie", movieID);
-                command.Parameters.AddWithValue("@currentUser", userID);
+                command.CommandText += " UPDATE Movies " + "SET NumberOfCopies-=1 WHERE MovieID=@movieID";
+                command.Parameters.AddWithValue("@customerID", userID);
+                command.Parameters.AddWithValue("@movieID", movieID);
+                command.Parameters.AddWithValue("@DateRented", DateTime.Now);
                 command.ExecuteNonQuery();
             }
         }
@@ -172,9 +158,6 @@ namespace VideoKlub
 
             //Check how many movies user currently has rented
             //Field method used due to issues with casting DBNull into nullable type
-            int? userMovie1 = (int?)userSearchResultsTable.Rows[userSelectionIndex].Field<int?>("Movie1");
-            int? userMovie2 = (int?)userSearchResultsTable.Rows[userSelectionIndex].Field<int?>("Movie2");
-            int? userMovie3 = (int?)userSearchResultsTable.Rows[userSelectionIndex].Field<int?>("Movie3");
 
             if (MessageBox.Show(String.Format("Are you sure {0} {1} wants to rent {2}?", userFirstName, userLastName, movieName), "Rent movie?", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
             {
@@ -185,12 +168,13 @@ namespace VideoKlub
                     return false;
                 }
                 //Check if user has rented maximum number of movies
-                else if (userMovie1 != null && userMovie2 != null && userMovie3 != null)
+                else if (rentedMoviesList.Rows.Count == MAX_MOVIES_RENTED)
                 {
-                    MessageBox.Show("The customer has rented the maximum amount of movies (3)");
+                    MessageBox.Show(String.Format("The customer has rented the maximum amount of movies ({0})", MAX_MOVIES_RENTED));
                     return false;
                 }
-                else if (userMovie1==movieId || userMovie2==movieId || userMovie3==movieId)
+                //Check if user has already rented the movie
+                else if (rentedMoviesList.AsEnumerable().Any(row => movieId == row.Field<int?>("MovieId")))
                 {
                     MessageBox.Show("The customer has already rented a copy of that movie!");
                     return false;
@@ -235,7 +219,7 @@ namespace VideoKlub
         {
             string query = "SELECT * from Movies WHERE Title LIKE @userSearchQuery + '%'";
 
-            using (connection = new SqlConnection(connectionString))
+            using (SqlConnection connection = new SqlConnection(connectionString))
             using (SqlCommand command = new SqlCommand(query, connection))
             using (SqlDataAdapter adapter = new SqlDataAdapter(command))
             {
@@ -266,26 +250,49 @@ namespace VideoKlub
 
         private void ReturnMovie(int returnUserID, int returnMovieID)
         {
-
+            const double PRICE_PER_DAY = 12.00;
             using (SqlConnection connection = new SqlConnection(connectionString))
             using (SqlCommand command = connection.CreateCommand())
             {
-                connection.Open();
-                command.CommandText = "UPDATE Customers " +
-                    "SET Movie1 = CASE WHEN Movie1=@returnedMovie THEN NULL ELSE Movie1 END, " +
-                    "Movie2 = CASE WHEN Movie2 =@returnedMovie THEN NULL ELSE Movie2 END, " +
-                    "Movie3 = CASE WHEN Movie3 =@returnedMovie THEN NULL ELSE Movie3 END " +
-                    "WHERE CustomerID=@currentUser";
+                //Pull data on rent date from database and calculate the price
+                command.CommandText = "SELECT " +
+                    "TOP 1 (DateRented) " +
+                    "FROM CustomerMovies " +
+                    "WHERE " +
+                    "Customer=@returnUserID AND Movie=@returnMovieID";
+                command.Parameters.AddWithValue("@returnMovieID", returnMovieID);
+                command.Parameters.AddWithValue("@returnUserID", returnUserID);
 
-                command.CommandText += " UPDATE Movies " + "SET NumberOfCopies+=1 WHERE MovieID=@returnedMovie";
-                command.Parameters.AddWithValue("@returnedMovie", returnMovieID);
-                command.Parameters.AddWithValue("@currentUser", returnUserID);
+                connection.Open();
+                DateTime rentDate = (DateTime)command.ExecuteScalar();
+                double rentCost = ((DateTime.Now - rentDate).Days+1)*PRICE_PER_DAY;
+
+                MessageBox.Show(String.Format("The movie was rented on {0}.\nTotal cost for this rent period is {1} HRK", rentDate.ToString("MM/dd/yyyy"), String.Format("{0:0.00}", rentCost)), "COST OF RENTAL");
+                
+                //Update database
+                command.CommandText = "DELETE FROM CustomerMovies " +
+                    "WHERE " +
+                    "Customer=@returnUserID AND Movie=@returnMovieID";
+
+                command.CommandText += " UPDATE Movies " + 
+                    "SET NumberOfCopies+=1 " +
+                    "WHERE MovieId=@returnMovieID";
+
                 command.ExecuteNonQuery();
 
-                //Update database, show that the number of available copies is reduced by one (just manually change query results instead of making another query)
+                //Show that the number of available copies is increased by one if the movie is currently selected (just manually change query results instead of making another query)
+                foreach (DataRow row in movieSearchResultsTable.Rows)
+                {
+                    if ((int)row["MovieId"] == returnMovieID)
+                    {
+                        int numberOfCopies = (int)row["NumberOfCopies"];
+                        numberOfCopies++;
+                        row.SetField("NumberOfCopies", numberOfCopies);
+                        ShowSelectedMovieDetails(null, null);
+                        break;
+                    }
+                }
                 
-                ShowSelectedMovieDetails(null, null);
-
                 //Do a user query to pull the data on rented movies
                 UserSearch(returnUserID);
                 resultsListboxUsers.SelectedIndex = 0;

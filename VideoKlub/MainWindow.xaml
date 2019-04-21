@@ -34,20 +34,11 @@
             </StackPanel>
         </DataTemplate>
 
-        <DataTemplate x:Key="rentedMovies">
-            <StackPanel FlowDirection="LeftToRight"  Orientation="Vertical">
-                <TextBlock Text="{Binding Path=Movie1}"></TextBlock>
-                <TextBlock Text="{Binding Path=Movie2}"></TextBlock>
-                <TextBlock Text="{Binding Path=Movie3}"></TextBlock>
-            </StackPanel>
-        </DataTemplate>
-
         <DataTemplate x:Key="movieDetails">
             <StackPanel FlowDirection="LeftToRight"  Orientation="Vertical">
                 <TextBlock Text="{Binding Path=Title}"></TextBlock>
                 <TextBlock Text="{Binding Path=Year}"></TextBlock>
                 <TextBlock Text="{Binding Path=Director}"></TextBlock>
-                <TextBlock Text="{Binding Path=Runtime}"></TextBlock>
                 <TextBlock Text="{Binding Path=Runtime}"></TextBlock>
                 <TextBlock Text="{Binding Path=NumberOfCopies}"></TextBlock>
             </StackPanel>
